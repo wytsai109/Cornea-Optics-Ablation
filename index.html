@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excimer Laser Ablation Simulator | 準分子雷射角膜散光消融視覺化系統</title>
+    <meta name="description" content="以 Ablation.cs 演算法為核心之眼科準分子雷射散光切削（Astigmatic Laser Ablation）動態即時模擬與 2D/3D 角膜地形視覺化系統。">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Three.js & OrbitControls for 3D Cornea View -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="laser-scanner-line" id="scannerLine"></div>
+
+    <div class="app-container">
+        <!-- Top Medical Grade Header -->
+        <header class="app-header">
+            <div class="header-branding">
+                <div class="logo-icon-box">
+                    <i class="fa-solid fa-eye-dropper fa-beat-fade"></i>
+                </div>
+                <div class="brand-text">
+                    <div class="title-row">
+                        <h1>CORNEA-OPTICS <span class="badge-laser">ABLATION-OS</span></h1>
+                        <span class="system-status"><span class="dot-live"></span> MULTI-REFRACTIVE ENGINE</span>
+                    </div>
+                    <p class="subtitle">眼科雷射角膜全屈光消融與微透鏡雕刻視覺化系統</p>
+                </div>
+            </div>
+
+            <!-- Quick Preset Buttons -->
+            <div class="header-presets">
+                <span class="preset-label"><i class="fa-solid fa-bookmark"></i> 臨床案例預設：</span>
+                <button class="preset-btn active" id="preset-wtr" data-mode="astigmatism" data-degree="90" data-power="2.0">散光 (90° -2.0D)</button>
+                <button class="preset-btn" id="preset-myopia" data-mode="myopia" data-myopia="5.0">單純近視 (-5.00D)</button>
+                <button class="preset-btn" id="preset-compound" data-mode="compound" data-myopia="4.0" data-degree="180" data-power="2.0">近視+散光 (-4.0D / -2.0D@180°)</button>
+                <button class="preset-btn" id="preset-smile" data-mode="smile" data-myopia="5.5" data-degree="90" data-power="1.5">SMILE 全飛秒 (-5.5D / -1.5D)</button>
+                <button class="preset-btn" id="preset-hyperopia" data-mode="hyperopia" data-hyperopia="3.0">遠視 (+3.00D 環切)</button>
+                <button class="preset-btn" id="preset-presbyopia" data-mode="presbyopia" data-add="2.0">老花 PresbyMAX (+2.0D 多焦)</button>
+            </div>
+
+            <div class="header-actions">
+                <button class="btn-sound" id="btnSoundToggle" title="雷射脈衝音效開關">
+                    <i class="fa-solid fa-volume-high"></i> 音效
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Body 3-Column Layout -->
+        <div class="main-layout">
+            <!-- LEFT PANEL: Parameters & Controls -->
+            <aside class="panel-left">
+                <!-- Surgery Type Selector Card -->
+                <div class="panel-card">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-stethoscope"></i> 手術屈光類型選擇</h3>
+                    </div>
+                    <div class="mode-selector-grid">
+                        <button class="mode-card active" id="modeBtnAstigmatism" data-mode="astigmatism">
+                            <span class="mode-icon">🎯</span>
+                            <span class="mode-name">單純散光</span>
+                            <span class="mode-desc">Ablation.cs</span>
+                        </button>
+                        <button class="mode-card" id="modeBtnMyopia" data-mode="myopia">
+                            <span class="mode-icon">👓</span>
+                            <span class="mode-name">單純近視</span>
+                            <span class="mode-desc">中央球狀削平</span>
+                        </button>
+                        <button class="mode-card" id="modeBtnCompound" data-mode="compound">
+                            <span class="mode-icon">🌟</span>
+                            <span class="mode-name">近視+散光</span>
+                            <span class="mode-desc">複合屈光切削</span>
+                        </button>
+                        <button class="mode-card highlight-femtosecond" id="modeBtnSmile" data-mode="smile">
+                            <span class="mode-icon">🔬</span>
+                            <span class="mode-name">全飛秒 SMILE</span>
+                            <span class="mode-desc">3D微透鏡取出</span>
+                        </button>
+                        <button class="mode-card" id="modeBtnHyperopia" data-mode="hyperopia">
+                            <span class="mode-icon">🔎</span>
+                            <span class="mode-name">遠視消融</span>
+                            <span class="mode-desc">周邊環形陡化</span>
+                        </button>
+                        <button class="mode-card" id="modeBtnPresbyopia" data-mode="presbyopia">
+                            <span class="mode-icon">👵</span>
+                            <span class="mode-name">老花多焦</span>
+                            <span class="mode-desc">PresbyMAX 非球面</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-sliders"></i> 臨床屈光參數調控</h3>
+                        <span class="badge-pill" id="badgeCurrentMode">ASTIGMATISM</span>
+                    </div>
+
+                    <!-- Sphere Power (Myopia / Hyperopia) -->
+                    <div class="control-group" id="grpSphere">
+                        <div class="label-row">
+                            <label for="inputSphere"><i class="fa-solid fa-circle"></i> 近視/遠視度數 (Sphere)</label>
+                            <span class="val-badge highlight" id="valSphere">-4.00 D</span>
+                        </div>
+                        <input type="range" id="inputSphere" min="-10.0" max="6.0" value="-4.0" step="0.25">
+                        <div class="range-ticks">
+                            <span>-10.0D (高度近視)</span>
+                            <span>0D (平光)</span>
+                            <span>+6.0D (遠視)</span>
+                        </div>
+                    </div>
+
+                    <!-- Presbyopia Near Add Power -->
+                    <div class="control-group" id="grpPresbyAdd" style="display:none;">
+                        <div class="label-row">
+                            <label for="inputPresbyAdd"><i class="fa-solid fa-book-open"></i> 老花閱讀加入度 (Near Add)</label>
+                            <span class="val-badge highlight" id="valPresbyAdd">+2.00 D</span>
+                        </div>
+                        <input type="range" id="inputPresbyAdd" min="1.0" max="3.5" value="2.0" step="0.25">
+                    </div>
+
+                    <!-- Astigmatism Degree (asti_degree) -->
+                    <div class="control-group" id="grpAstiDegree">
+                        <div class="label-row">
+                            <label for="inputAstiDegree"><i class="fa-solid fa-compass"></i> 散光軸度 (asti_degree)</label>
+                            <span class="val-badge" id="valAstiDegree">90°</span>
+                        </div>
+                        <input type="range" id="inputAstiDegree" min="0" max="180" value="90" step="1">
+                        <div class="range-ticks">
+                            <span>0° (平)</span>
+                            <span>45° (斜)</span>
+                            <span>90° (垂直)</span>
+                            <span>135°</span>
+                            <span>180°</span>
+                        </div>
+                    </div>
+
+                    <!-- Astigmatic Cylinder Power -->
+                    <div class="control-group" id="grpCylinder">
+                        <div class="label-row">
+                            <label for="inputCylinder"><i class="fa-solid fa-chart-line"></i> 散光度數 (Cylinder)</label>
+                            <span class="val-badge" id="valCylinder">-2.00 D</span>
+                        </div>
+                        <input type="range" id="inputCylinder" min="0.5" max="5.0" value="2.0" step="0.25">
+                    </div>
+
+                    <!-- Optical Zone Diameter -->
+                    <div class="control-group">
+                        <div class="label-row">
+                            <label for="inputOpticalZone"><i class="fa-solid fa-bullseye"></i> 光學切削區 (Optical Zone)</label>
+                            <span class="val-badge" id="valOpticalZone">6.5 mm</span>
+                        </div>
+                        <input type="range" id="inputOpticalZone" min="5.0" max="8.0" value="6.5" step="0.1">
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <!-- Ablation Multi-layer Architecture -->
+                    <div class="card-header small">
+                        <h4><i class="fa-solid fa-layer-group"></i> 演算法分層結構 (Architecture)</h4>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="label-row">
+                            <label for="inputPhases">消融階段總數 (total_phase)</label>
+                            <span class="val-badge highlight" id="valPhases">3</span>
+                        </div>
+                        <input type="range" id="inputPhases" min="1" max="5" value="3" step="1">
+                    </div>
+
+                    <div class="control-group">
+                        <div class="label-row">
+                            <label for="inputLayersPerPhase">每階段層數 (layers[i])</label>
+                            <span class="val-badge highlight" id="valLayers">4</span>
+                        </div>
+                        <input type="range" id="inputLayersPerPhase" min="2" max="8" value="4" step="1">
+                    </div>
+
+                    <div class="control-group">
+                        <div class="label-row">
+                            <label for="inputPulseDensity">角膜離散採樣點數 (num_of_points)</label>
+                            <span class="val-badge" id="valPoints">2800</span>
+                        </div>
+                        <input type="range" id="inputPulseDensity" min="1200" max="4500" value="2800" step="200">
+                    </div>
+
+                    <!-- Algorithm Reset & Recompute -->
+                    <div class="btn-grid-actions">
+                        <button class="btn-action primary" id="btnApplyParams">
+                            <i class="fa-solid fa-rotate-right"></i> 重新編譯生成消融表
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mathematical Variable Live Watch -->
+                <div class="panel-card math-monitor-card">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-calculator"></i> 核心幾何即時變數</h3>
+                        <span class="pulse-indicator"></span>
+                    </div>
+                    <div class="math-grid">
+                        <div class="math-item">
+                            <span class="var-name">&theta; (rad)</span>
+                            <span class="var-val" id="watchTheta">1.5708</span>
+                        </div>
+                        <div class="math-item">
+                            <span class="var-name">r0 (mm)</span>
+                            <span class="var-val" id="watchR0">1.25</span>
+                        </div>
+                        <div class="math-item">
+                            <span class="var-name">radius (mm)</span>
+                            <span class="var-val" id="watchRadius">0.85</span>
+                        </div>
+                        <div class="math-item">
+                            <span class="var-name">PP10 (X, Y)</span>
+                            <span class="var-val mono" id="watchPP10">-0.85, 1.25</span>
+                        </div>
+                        <div class="math-item">
+                            <span class="var-name">PP11 (X, Y)</span>
+                            <span class="var-val mono" id="watchPP11">0.85, 1.25</span>
+                        </div>
+                        <div class="math-item">
+                            <span class="var-name">CCW 判定法</span>
+                            <span class="var-val tag-ccw" id="watchCCW">Active</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- CENTER PANEL: Visualization Viewports -->
+            <main class="panel-center">
+                <!-- Viewport Mode Switcher Tabs -->
+                <div class="viewport-toolbar">
+                    <div class="toolbar-tabs">
+                        <button class="view-tab-btn active" id="tab2D" data-view="2d">
+                            <i class="fa-solid fa-circle-dot"></i> 2D 雷射光斑即時切削熱圖
+                        </button>
+                        <button class="view-tab-btn" id="tab3D" data-view="3d">
+                            <i class="fa-solid fa-cube"></i> 3D 角膜地形曲率變化 (Curvature)
+                        </button>
+                        <button class="view-tab-btn" id="tabCrossSection" data-view="profile">
+                            <i class="fa-solid fa-chart-area"></i> 軸向切削截面深度 (Profile)
+                        </button>
+                    </div>
+
+                    <div class="toolbar-options">
+                        <label class="toggle-control" title="顯示散光軸向參考十字線">
+                            <input type="checkbox" id="chkShowAxes" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-text">軸向線</span>
+                        </label>
+                        <label class="toggle-control" title="顯示對稱雷射切削雙翼 (PP10/PP20)">
+                            <input type="checkbox" id="chkShowChords" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-text">光斑切線</span>
+                        </label>
+                        <label class="toggle-control" title="顯示離散角膜採樣點雲">
+                            <input type="checkbox" id="chkShowPoints" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-text">網格點</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Simulation Canvas Container -->
+                <div class="canvas-stage" id="canvasStage">
+                    <!-- 2D Canvas -->
+                    <div class="viewport-container active" id="container2D">
+                        <canvas id="ablationCanvas2D"></canvas>
+                        
+                        <!-- Overlay Legend & Topography Scale -->
+                        <div class="topography-legend">
+                            <div class="legend-header">消融深度 (Ablation Depth)</div>
+                            <div class="legend-bar"></div>
+                            <div class="legend-labels">
+                                <span>0 &mu;m</span>
+                                <span id="legendMid">25 &mu;m</span>
+                                <span id="legendMax">50 &mu;m</span>
+                            </div>
+                        </div>
+
+                        <!-- Real-time HUD Status -->
+                        <div class="canvas-hud">
+                            <div class="hud-item"><span class="hud-label">目前階段：</span><span class="hud-val" id="hudPhase">Phase 1 / 3</span></div>
+                            <div class="hud-item"><span class="hud-label">當前層次：</span><span class="hud-val" id="hudLayer">Layer 1 / 4</span></div>
+                            <div class="hud-item"><span class="hud-label">脈衝進度：</span><span class="hud-val" id="hudProgress">0%</span></div>
+                        </div>
+                    </div>
+
+                    <!-- 3D Canvas Viewport (Three.js) -->
+                    <div class="viewport-container" id="container3D">
+                        <div id="threeContainer"></div>
+                        <div class="three-controls-hint">
+                            <i class="fa-solid fa-computer-mouse"></i> 滑鼠左鍵旋轉 · 滾輪縮放 · 右鍵平移 3D 角膜
+                        </div>
+                    </div>
+
+                    <!-- Cross-Section Profile Viewport -->
+                    <div class="viewport-container" id="containerProfile">
+                        <canvas id="profileCanvas"></canvas>
+                        <div class="profile-meta-box">
+                            <span class="badge-pill">CORNEAL STROMA PROFILE</span>
+                            <p>沿散光強弱主軸之切削凹槽對稱圖 (Symmetric Ablation Trough)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Simulation Control Bar -->
+                <div class="sim-timeline-bar">
+                    <div class="playback-controls">
+                        <button class="btn-ctrl primary" id="btnPlayPause" title="開始/暫停模擬">
+                            <i class="fa-solid fa-play" id="iconPlayPause"></i> <span id="textPlayPause">開始消融</span>
+                        </button>
+                        <button class="btn-ctrl" id="btnStep" title="單步推進一層 (Next Layer)">
+                            <i class="fa-solid fa-forward-step"></i> 單步
+                        </button>
+                        <button class="btn-ctrl" id="btnInstant" title="瞬間計算完成所有切削">
+                            <i class="fa-solid fa-bolt"></i> 瞬間切削
+                        </button>
+                        <button class="btn-ctrl success" id="btnExtractLenticule" style="display:none;" title="從 2mm 微創切口取出角膜基質透鏡">
+                            <i class="fa-solid fa-scissors"></i> 取出微透鏡
+                        </button>
+                        <button class="btn-ctrl danger" id="btnReset" title="重置角膜回原始狀態">
+                            <i class="fa-solid fa-arrow-rotate-left"></i> 重置
+                        </button>
+                    </div>
+
+                    <div class="timeline-speed">
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <span>模擬雷射脈衝頻率：</span>
+                        <input type="range" id="inputSimSpeed" min="1" max="10" value="5" step="1">
+                        <span class="val-speed" id="valSimSpeed">中速 (250Hz)</span>
+                    </div>
+
+                    <div class="timeline-progress-wrap">
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="simProgressBar"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- RIGHT PANEL: Clinical Metrics & Live Code Trace -->
+            <aside class="panel-right">
+                <!-- Clinical Metrics Card -->
+                <div class="panel-card metrics-card">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-heart-pulse"></i> 手術臨床指標與安全評估</h3>
+                    </div>
+
+                    <div class="metric-row-box">
+                        <div class="metric-metric">
+                            <div class="metric-title">總累計雷射擊發數 (Total Shots)</div>
+                            <div class="metric-value highlight" id="metricTotalShots">0</div>
+                        </div>
+                        <div class="metric-metric">
+                            <div class="metric-title">最大角膜切削深度 (Max Depth)</div>
+                            <div class="metric-value" id="metricMaxDepth">0.0 &mu;m</div>
+                        </div>
+                    </div>
+
+                    <div class="safety-gauge-container">
+                        <div class="safety-label-row">
+                            <span>剩餘基質床厚度估算 (RSB)</span>
+                            <span class="safety-status safe" id="rsbStatus">480 &mu;m (安全 &gt; 250&mu;m)</span>
+                        </div>
+                        <div class="safety-bar">
+                            <div class="safety-fill" id="rsbFill" style="width: 85%;"></div>
+                        </div>
+                    </div>
+
+                    <div class="metric-row-box secondary">
+                        <div class="metric-metric">
+                            <div class="metric-title">等效球面度數修正</div>
+                            <div class="metric-value" id="metricSE">-1.00 D</div>
+                        </div>
+                        <div class="metric-metric">
+                            <div class="metric-title">柱鏡消除率</div>
+                            <div class="metric-value text-success" id="metricCylRatio">100%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Code Execution Inspector -->
+                <div class="panel-card code-trace-card">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-terminal"></i> 演算法執行追蹤 (Code Trace)</h3>
+                        <span class="badge-pill">ALGORITHM ENGINE</span>
+                    </div>
+                    <div class="code-viewport" id="codeViewport">
+                        <div class="code-line" data-line="1"><span class="ln">01</span><span class="kw">for</span> (i = 0; i &lt; total_phase; i++)</div>
+                        <div class="code-line" data-line="3"><span class="ln">03</span>&nbsp;&nbsp;<span class="kw">for</span> (j = 0; j &lt; layers[i]; j++)</div>
+                        <div class="code-line" data-line="5"><span class="ln">05</span>&nbsp;&nbsp;&nbsp;&nbsp;r0 = mintable[i][j];</div>
+                        <div class="code-line" data-line="6"><span class="ln">06</span>&nbsp;&nbsp;&nbsp;&nbsp;theta = asti_degree * Math.PI / 180.0;</div>
+                        <div class="code-line" data-line="7"><span class="ln">07</span>&nbsp;&nbsp;&nbsp;&nbsp;radius = maxtable[i][j] - r0;</div>
+                        <div class="code-line" data-line="8"><span class="ln">08</span>&nbsp;&nbsp;&nbsp;&nbsp;PP10.X = r0*Cos(&theta;) - radius*Sin(&theta;);</div>
+                        <div class="code-line" data-line="10"><span class="ln">10</span>&nbsp;&nbsp;&nbsp;&nbsp;PP11.X = r0*Cos(&theta;) + radius*Sin(&theta;);</div>
+                        <div class="code-line" data-line="14"><span class="ln">14</span>&nbsp;&nbsp;&nbsp;&nbsp;center_X_1 = r0 * Math.Cos(theta);</div>
+                        <div class="code-line" data-line="16"><span class="ln">16</span>&nbsp;&nbsp;&nbsp;&nbsp;PP20.X = -PP10.X; PP21.X = -PP11.X;</div>
+                        <div class="code-line" data-line="28"><span class="ln">28</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> (intersection(P0, P1, PP10, PP11))</div>
+                        <div class="code-line" data-line="36"><span class="ln">36</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> (rad &lt;= radius) { <span class="fn">shots[i][k]++</span>; }</div>
+                        <div class="code-line" data-line="42"><span class="ln">42</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">else if</span> (intersection(P0, P1, PP20, PP21))</div>
+                        <div class="code-line" data-line="46"><span class="ln">46</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">if</span> (rad &lt;= radius) { <span class="fn">shots[i][k]++</span>; }</div>
+                    </div>
+                </div>
+
+                <!-- Clinical Insight -->
+                <div class="panel-card insight-card">
+                    <div class="card-header">
+                        <h3><i class="fa-solid fa-lightbulb"></i> 演算法運作原理解析</h3>
+                    </div>
+                    <p class="insight-p">
+                        此演算法利用雙側對稱幾何（<code>PP10</code> 與 <code>PP20</code>）沿著散光軸度 $\theta$ 進行鏡像切削，透過 <code>CCW</code> 叉積檢查與扇形範圍半徑（<code>rad &le; radius</code>）計算，在散光最強曲率軸向兩側遞增切削點打擊數（<code>shots[i][k]++</code>），達到平整角膜散光的效果。
+                    </p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="app.js"></script>
+</body>
+</html>
